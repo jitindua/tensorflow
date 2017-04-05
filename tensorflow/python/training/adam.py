@@ -90,6 +90,7 @@ class AdamOptimizer(optimizer.Optimizer):
     self._beta1_t = None
     self._beta2_t = None
     self._epsilon_t = None
+    self._use_nesterov_t = None
 
     # Variables to accumulate the powers of the beta parameters.
     # Created in _create_slots when we know the variables to optimize.
@@ -124,6 +125,7 @@ class AdamOptimizer(optimizer.Optimizer):
     self._beta1_t = ops.convert_to_tensor(self._beta1, name="beta1")
     self._beta2_t = ops.convert_to_tensor(self._beta2, name="beta2")
     self._epsilon_t = ops.convert_to_tensor(self._epsilon, name="epsilon")
+    self._use_nesterov_t = ops.convert_to_tensor(self._use_nesterov, name="use_nesterov")
 
   def _apply_dense(self, grad, var):
     m = self.get_slot(var, "m")
@@ -146,6 +148,7 @@ class AdamOptimizer(optimizer.Optimizer):
     beta1_t = math_ops.cast(self._beta1_t, var.dtype.base_dtype)
     beta2_t = math_ops.cast(self._beta2_t, var.dtype.base_dtype)
     epsilon_t = math_ops.cast(self._epsilon_t, var.dtype.base_dtype)
+    use_nesterov_t = math_ops.cast(self._use_nesterov_t, var.dtype.base_dtype)
     lr = (lr_t * math_ops.sqrt(1 - beta2_power) / (1 - beta1_power))
     # m_t = beta1 * m + (1 - beta1) * g_t
     m = self.get_slot(var, "m")
