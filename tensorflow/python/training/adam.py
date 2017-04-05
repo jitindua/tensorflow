@@ -35,7 +35,7 @@ class AdamOptimizer(optimizer.Optimizer):
   """
 
   def __init__(self, learning_rate=0.001, beta1=0.9, beta2=0.999, epsilon=1e-8,
-               use_locking=False, name="Adam"):
+               use_locking=False, name="Adam", use_nesterov=False):
     """Construct a new Adam optimizer.
 
     Initialization:
@@ -76,18 +76,21 @@ class AdamOptimizer(optimizer.Optimizer):
       use_locking: If True use locks for update operations.
       name: Optional name for the operations created when applying gradients.
         Defaults to "Adam".
+      use_nesterov: If `True` use Nesterov Momentum.
     """
     super(AdamOptimizer, self).__init__(use_locking, name)
     self._lr = learning_rate
     self._beta1 = beta1
     self._beta2 = beta2
     self._epsilon = epsilon
+    self._use_nesterov = use_nesterov
 
     # Tensor versions of the constructor arguments, created in _prepare().
     self._lr_t = None
     self._beta1_t = None
     self._beta2_t = None
     self._epsilon_t = None
+    self._use_nesterov_t = None
 
     # Variables to accumulate the powers of the beta parameters.
     # Created in _create_slots when we know the variables to optimize.
@@ -122,6 +125,7 @@ class AdamOptimizer(optimizer.Optimizer):
     self._beta1_t = ops.convert_to_tensor(self._beta1, name="beta1")
     self._beta2_t = ops.convert_to_tensor(self._beta2, name="beta2")
     self._epsilon_t = ops.convert_to_tensor(self._epsilon, name="epsilon")
+    self._use_nesterov_t = ops.convert_to_tensor(self._use_nesterov, name="use_nesterov")
 
   def _apply_dense(self, grad, var):
     m = self.get_slot(var, "m")
@@ -143,6 +147,7 @@ class AdamOptimizer(optimizer.Optimizer):
     beta1_t = math_ops.cast(self._beta1_t, var.dtype.base_dtype)
     beta2_t = math_ops.cast(self._beta2_t, var.dtype.base_dtype)
     epsilon_t = math_ops.cast(self._epsilon_t, var.dtype.base_dtype)
+    use_nesterov_t = math_ops.cast(self._use_nesterov_t, var.dtype.base_dtype)
     lr = (lr_t * math_ops.sqrt(1 - beta2_power) / (1 - beta1_power))
     # m_t = beta1 * m + (1 - beta1) * g_t
     m = self.get_slot(var, "m")
@@ -151,6 +156,11 @@ class AdamOptimizer(optimizer.Optimizer):
                            use_locking=self._use_locking)
     m_t = state_ops.scatter_add(m_t, grad.indices, m_scaled_g_values,
                                use_locking=self._use_locking)
+    if (use_nesterov_t):
+      # m_bar = (1 - beta1)g_t + beta1 * m_t
+      m_bar = m_scaled_g_values + beta1_t * m_t
+    else:
+      m_bar = m_t
     # v_t = beta2 * v + (1 - beta2) * (g_t * g_t)
     v = self.get_slot(var, "v")
     v_scaled_g_values = (grad.values * grad.values) * (1 - beta2_t)
@@ -159,7 +169,7 @@ class AdamOptimizer(optimizer.Optimizer):
                                use_locking=self._use_locking)
     v_sqrt = math_ops.sqrt(v_t)
     var_update = state_ops.assign_sub(var,
-                                      lr * m_t / (v_sqrt + epsilon_t),
+                                      lr * m_bar / (v_sqrt + epsilon_t),
                                       use_locking=self._use_locking)
     return control_flow_ops.group(*[var_update, m_t, v_t])
 
